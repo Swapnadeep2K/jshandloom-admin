@@ -86,6 +86,29 @@
 
       <button class="btn btn-secondary back-btn" onclick="backToProducts()">&#8592; Back to products</button>
 
+      <!-- Mode select -->
+      <div id="add-mode-select">
+        <div class="step-header">
+          <h2>Add product</h2>
+          <p>What would you like to add?</p>
+        </div>
+        <div class="add-mode-cards">
+          <button class="add-mode-card" onclick="selectAddMode('single')">
+            <div class="add-mode-icon">&#10010;</div>
+            <p class="add-mode-title">Single product</p>
+            <p class="add-mode-desc">Upload photos and generate details for one product</p>
+          </button>
+          <button class="add-mode-card" onclick="selectAddMode('multi')">
+            <div class="add-mode-icon">&#10010;&#10010;</div>
+            <p class="add-mode-title">Multiple colour variants</p>
+            <p class="add-mode-desc">Same design, different colours — added together in one PR</p>
+          </button>
+        </div>
+      </div>
+
+      <!-- Single product flow -->
+      <div id="single-add-view" class="hidden">
+
       <!-- Step 1: Upload form -->
       <div id="add-step-1">
         <div class="step-header">
@@ -126,6 +149,13 @@
             <option value="">AI will decide from the photos</option>
             <option value="In Stock">In Stock</option>
             <option value="Made to Order">Made to Order</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="sibling-select">Colour variant of <span class="label-opt">optional</span></label>
+          <select id="sibling-select" class="form-control" onchange="onSiblingChange()">
+            <option value="">Not a variant — generate from scratch</option>
           </select>
         </div>
 
@@ -197,7 +227,63 @@
         </div>
 
       </div>
-    </div>
+      </div><!-- /#single-add-view -->
+
+      <!-- Multi-variant flow -->
+      <div id="multi-add-view" class="hidden">
+        <div class="step-header">
+          <h2>Add colour variants</h2>
+          <p>Upload photos for each colour. Share the same design details.</p>
+        </div>
+        <div id="multi-slots"></div>
+        <button class="btn btn-secondary" id="add-slot-btn" onclick="addMultiSlot()" style="margin-bottom:20px">+ Add another colour</button>
+        <div class="form-group">
+          <label for="multi-notes">Notes about the design <span class="label-opt">optional</span></label>
+          <textarea id="multi-notes" class="form-control" placeholder="e.g. Matka silk with chevron feather border — available in multiple colours"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="multi-price">Price <span class="label-opt">optional</span></label>
+          <input type="text" id="multi-price" class="form-control" placeholder="e.g. &#8377;12,500  or  Price on enquiry" />
+        </div>
+        <div class="form-group">
+          <label for="multi-availability">Availability <span class="label-opt">optional</span></label>
+          <select id="multi-availability" class="form-control">
+            <option value="">AI will decide from the photos</option>
+            <option value="In Stock">In Stock</option>
+            <option value="Made to Order">Made to Order</option>
+          </select>
+        </div>
+        <button class="btn btn-accent" id="multi-generate-btn" onclick="startGenerateAll()">Analyse &amp; generate all</button>
+        <div id="multi-generate-error" class="error-msg hidden"></div>
+
+        <!-- Multi review -->
+        <div id="multi-review" class="hidden">
+          <div class="step-header">
+            <h2>Review variants</h2>
+            <p>Check each variant below before submitting.</p>
+          </div>
+          <div id="multi-review-list"></div>
+          <div class="review-actions" style="margin-top:20px">
+            <button class="btn btn-success" id="multi-confirm-btn" onclick="submitBatch()">Submit all &amp; create PR</button>
+            <div id="multi-confirm-error" class="error-msg hidden"></div>
+          </div>
+        </div>
+
+        <!-- Multi success -->
+        <div id="multi-success" class="confirm-success hidden">
+          <div class="success-circle">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#27674a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </div>
+          <h3>Pull request created!</h3>
+          <p id="multi-success-msg"></p>
+          <a id="multi-pr-link" href="#" target="_blank" class="pr-link">View pull request &rarr;</a>
+          <button class="btn btn-primary" style="width:100%;max-width:280px;margin-top:16px" onclick="backToProducts()">Back to products</button>
+        </div>
+      </div><!-- /#multi-add-view -->
+
+    </div><!-- /#products-add-view -->
   </div>
 
   <!-- ── Categories tab ────────────────────────────────────────────────────── -->

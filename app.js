@@ -5,9 +5,15 @@ const API = (window.location.hostname === 'localhost' || window.location.hostnam
 // ── State ─────────────────────────────────────────────────────────────────────
 let selectedPhotos    = [];
 let photoURLs         = [];
+let photoOrder        = []; // indices into compressed bytes on disk, in user-chosen display order
 let currentDraft      = null;
 let currentSessionId  = null;
 let currentCategories = [];
+let siblingId         = null;
+
+let addMode        = 'single'; // 'single' | 'multi'
+let multiSlots     = []; // [{id, photos, photoURLs, colourHint, sessionId, draft}]
+let multiSlotCounter = 0;
 
 let allProducts   = [];
 let allCategories = [];
@@ -78,6 +84,7 @@ function switchTab(name, btn) {
   document.getElementById(`tab-${name}`).classList.remove('hidden');
   btn.classList.add('active');
   if (name === 'products') {
+    resetAddForm();
     document.getElementById('products-add-view').classList.add('hidden');
     document.getElementById('products-list-view').classList.remove('hidden');
     loadManage();
@@ -89,6 +96,10 @@ function switchTab(name, btn) {
 function showAddProduct() {
   document.getElementById('products-list-view').classList.add('hidden');
   document.getElementById('products-add-view').classList.remove('hidden');
+  // Always show mode select first; hide single and multi views
+  document.getElementById('add-mode-select').classList.remove('hidden');
+  document.getElementById('single-add-view').classList.add('hidden');
+  document.getElementById('multi-add-view').classList.add('hidden');
 }
 
 function backToProducts() {
@@ -178,6 +189,7 @@ async function startGenerate() {
   fd.append('notes',        document.getElementById('notes').value.trim());
   fd.append('price',        document.getElementById('price').value.trim());
   fd.append('availability', document.getElementById('availability').value);
+  fd.append('sibling_id',   siblingId || '');
 
   try {
     const res  = await fetch(`${API}/generate`, {
@@ -211,14 +223,17 @@ function resetAddForm() {
   selectedPhotos    = [];
   photoURLs.forEach(u => URL.revokeObjectURL(u));
   photoURLs         = [];
+  photoOrder        = [];
   currentDraft      = null;
   currentSessionId  = null;
   currentCategories = [];
+  siblingId         = null;
 
   const f = id => document.getElementById(id);
-  if (f('notes'))        f('notes').value        = '';
-  if (f('price'))        f('price').value        = '';
-  if (f('availability')) f('availability').value = '';
+  if (f('notes'))           f('notes').value           = '';
+  if (f('price'))           f('price').value           = '';
+  if (f('availability'))    f('availability').value    = '';
+  if (f('sibling-select'))  f('sibling-select').value  = '';
 
   renderThumbs();
   f('add-step-2').classList.add('hidden');
@@ -227,6 +242,41 @@ function resetAddForm() {
   f('confirm-success').classList.add('hidden');
   f('gen-loading').classList.remove('hidden');
   hideMsg('generate-error');
+
+  // Reset multi-variant state
+  addMode = 'single';
+  multiSlots.forEach(s => s.photoURLs.forEach(u => URL.revokeObjectURL(u)));
+  multiSlots = [];
+  multiSlotCounter = 0;
+  const multiReview = f('multi-review');
+  if (multiReview) {
+    multiReview.classList.add('hidden');
+    multiReview.querySelector('#multi-review-list').innerHTML = '';
+  }
+  const multiSuccess = f('multi-success');
+  if (multiSuccess) multiSuccess.classList.add('hidden');
+  const multiSlotEl = f('multi-slots');
+  if (multiSlotEl) multiSlotEl.innerHTML = '';
+  const mNotes = f('multi-notes');
+  if (mNotes) mNotes.value = '';
+  const mPrice = f('multi-price');
+  if (mPrice) mPrice.value = '';
+  const mAvail = f('multi-availability');
+  if (mAvail) mAvail.value = '';
+  const mBtn = f('multi-generate-btn');
+  if (mBtn) { mBtn.disabled = false; mBtn.textContent = 'Analyse & generate all'; }
+  const addSlotBtn = f('add-slot-btn');
+  if (addSlotBtn) addSlotBtn.disabled = false;
+  hideMsg('multi-generate-error');
+  hideMsg('multi-confirm-error');
+
+  // Restore mode-select; hide single/multi views
+  const modeSelect = f('add-mode-select');
+  if (modeSelect) modeSelect.classList.remove('hidden');
+  const singleView = f('single-add-view');
+  if (singleView) singleView.classList.add('hidden');
+  const multiView = f('multi-add-view');
+  if (multiView) multiView.classList.add('hidden');
 }
 
 // ── Add product — review screen ───────────────────────────────────────────────
@@ -244,15 +294,14 @@ const REVIEW_FIELDS = [
 ];
 
 function showReviewScreen() {
+  photoOrder = selectedPhotos.map((_, i) => i); // reset to [0,1,2,...] on each generate
   const anyFlagged = REVIEW_FIELDS.some(f => currentDraft[`${f.key}_needsReview`]);
   document.getElementById('review-banner').classList.toggle('hidden', !anyFlagged);
 
   renderReviewPhotos();
 
-  const baseId = currentDraft.id || '';
-  const initColour = (currentDraft.colour || '').toUpperCase().replace(/\s+/g, '-');
-  const initDisplayId = initColour ? `${baseId}-${initColour}` : baseId;
-  const idHtml = baseId
+  const initDisplayId = currentDraft.id || '';
+  const idHtml = initDisplayId
     ? `<div class="form-group">
         <label>Product ID</label>
         <input type="text" id="review-id-display" class="form-control" value="${escAttr(initDisplayId)}" disabled />
@@ -325,27 +374,24 @@ function renderReviewPhotos() {
   photoURLs = selectedPhotos.map(f => URL.createObjectURL(f));
   const grid = document.getElementById('review-photo-grid');
   if (!grid) return;
-  const n = selectedPhotos.length;
-  grid.innerHTML = photoURLs.map((url, i) => `
+  const n = photoOrder.length;
+  grid.innerHTML = photoOrder.map((origIdx, displayPos) => `
     <div class="review-photo-item">
       <div class="review-photo-img-wrap">
-        <img src="${url}" alt="Photo ${i + 1}" />
+        <img src="${photoURLs[origIdx]}" alt="Photo ${displayPos + 1}" />
       </div>
-      <p class="review-photo-badge">${i === 0 ? 'Main' : ''}</p>
+      <p class="review-photo-badge">${displayPos === 0 ? 'Main' : ''}</p>
       <div class="review-photo-arrows">
-        <button class="arrow-btn" onclick="movePhoto(${i},-1)" ${i === 0 ? 'disabled' : ''}>&#8592;</button>
-        <button class="arrow-btn" onclick="movePhoto(${i},1)"  ${i === n - 1 ? 'disabled' : ''}>&#8594;</button>
+        <button class="arrow-btn" onclick="movePhoto(${displayPos},-1)" ${displayPos === 0 ? 'disabled' : ''}>&#8592;</button>
+        <button class="arrow-btn" onclick="movePhoto(${displayPos},1)"  ${displayPos === n - 1 ? 'disabled' : ''}>&#8594;</button>
       </div>
     </div>`).join('');
 }
 
 function movePhoto(idx, dir) {
   const ni = idx + dir;
-  if (ni < 0 || ni >= selectedPhotos.length) return;
-  [selectedPhotos[idx], selectedPhotos[ni]] = [selectedPhotos[ni], selectedPhotos[idx]];
-  if (currentDraft.images) {
-    [currentDraft.images[idx], currentDraft.images[ni]] = [currentDraft.images[ni], currentDraft.images[idx]];
-  }
+  if (ni < 0 || ni >= photoOrder.length) return;
+  [photoOrder[idx], photoOrder[ni]] = [photoOrder[ni], photoOrder[idx]];
   renderReviewPhotos();
 }
 
@@ -353,6 +399,22 @@ function toggleFeatured() {
   currentDraft.isFeatured = !currentDraft.isFeatured;
   const t = document.getElementById('featured-toggle');
   if (t) t.classList.toggle('on', currentDraft.isFeatured);
+}
+
+function onSiblingChange() {
+  const sel = document.getElementById('sibling-select');
+  siblingId = sel ? (sel.value || null) : null;
+}
+
+function populateSiblingSelect() {
+  const sel = document.getElementById('sibling-select');
+  if (!sel) return;
+  const opts = allProducts.map(p =>
+    `<option value="${escAttr(p.id)}">${escHtml(p.name || p.id)}</option>`
+  ).join('');
+  sel.innerHTML = `<option value="">Not a variant — generate from scratch</option>${opts}`;
+  // restore selection if siblingId is still set
+  if (siblingId) sel.value = siblingId;
 }
 
 function onCategoryChange() {
@@ -425,6 +487,7 @@ function getReviewDraft() {
     draft.whatsappMessage = "Hi, I saw one of your sarees and I'm interested. Could you share more details and pricing?";
   }
 
+  draft.photoOrder = [...photoOrder];
   return draft;
 }
 
@@ -466,7 +529,7 @@ async function submitConfirm() {
     const res  = await fetch(`${API}/confirm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-token': token() },
-      body: JSON.stringify({ sessionId: currentSessionId, draft }),
+      body: JSON.stringify({ sessionId: currentSessionId, draft, photoOrder: draft.photoOrder || [] }),
     });
     const data = await res.json();
 
@@ -493,6 +556,7 @@ async function loadManage() {
   f('products-content').classList.add('hidden');
   f('products-empty').classList.add('hidden');
   f('products-fetch-error').classList.add('hidden');
+  hideMsg('manage-save-success');
 
   try {
     const res  = await fetch(`${API}/products`, { headers: { 'x-token': token() } });
@@ -522,6 +586,7 @@ async function loadManage() {
     }
 
     renderProductList();
+    populateSiblingSelect();
     const n = allProducts.length;
     f('products-count').textContent = `${n} product${n === 1 ? '' : 's'} in catalog`;
     f('products-content').classList.remove('hidden');
@@ -559,14 +624,14 @@ function renderProductList() {
           <div class="mini-toggle-col">
             <span class="mini-toggle-label">Live</span>
             <div class="toggle-switch sm${live ? ' on' : ''}" id="live-${p.id}"
-                 onclick="toggleLive('${p.id}')">
+                 onclick="toggleLive('${escAttr(p.id)}')">
               <div class="toggle-knob"></div>
             </div>
           </div>
           <div class="mini-toggle-col">
             <span class="mini-toggle-label">Featured</span>
             <div class="toggle-switch sm${feat ? ' on' : ''}" id="feat-${p.id}"
-                 onclick="toggleManageFeatured('${p.id}')">
+                 onclick="toggleManageFeatured('${escAttr(p.id)}')">
               <div class="toggle-knob"></div>
             </div>
           </div>
@@ -788,8 +853,9 @@ function handleDeleteOverlayClick(e) {
 
 async function confirmDelete() {
   if (!pendingDelete) return;
-  if (pendingDelete.type === 'product')  await doDeleteProduct(pendingDelete.id);
-  if (pendingDelete.type === 'category') await doDeleteCategory(pendingDelete.code);
+  const toDelete = pendingDelete;
+  if (toDelete.type === 'product')       await doDeleteProduct(toDelete.id);
+  else if (toDelete.type === 'category') await doDeleteCategory(toDelete.code);
 }
 
 async function doDeleteProduct(id) {
@@ -999,4 +1065,263 @@ function showError(id, msg) {
 
 function hideMsg(id) {
   document.getElementById(id)?.classList.add('hidden');
+}
+
+// ── Add mode selection ────────────────────────────────────────────────────────
+function selectAddMode(mode) {
+  addMode = mode;
+  document.getElementById('add-mode-select').classList.add('hidden');
+  if (mode === 'single') {
+    document.getElementById('single-add-view').classList.remove('hidden');
+  } else {
+    document.getElementById('multi-add-view').classList.remove('hidden');
+    if (multiSlots.length === 0) {
+      addMultiSlot();
+      addMultiSlot();
+    }
+  }
+}
+
+// ── Multi-slot management ─────────────────────────────────────────────────────
+function addMultiSlot() {
+  if (multiSlots.length >= 5) return;
+  const id = ++multiSlotCounter;
+  multiSlots.push({ id, photos: [], photoURLs: [], colourHint: '', sessionId: null, draft: null });
+  renderMultiSlots();
+  if (multiSlots.length >= 5) {
+    document.getElementById('add-slot-btn').disabled = true;
+  }
+}
+
+function removeMultiSlot(id) {
+  if (multiSlots.length <= 2) return; // minimum 2
+  const slot = multiSlots.find(s => s.id === id);
+  if (slot) slot.photoURLs.forEach(u => URL.revokeObjectURL(u));
+  multiSlots = multiSlots.filter(s => s.id !== id);
+  renderMultiSlots();
+  document.getElementById('add-slot-btn').disabled = false;
+}
+
+function renderMultiSlots() {
+  document.getElementById('multi-slots').innerHTML = multiSlots.map((slot, i) => `
+    <div class="multi-slot" id="multi-slot-${slot.id}">
+      <div class="multi-slot-header">
+        <span class="multi-slot-label">Colour ${i + 1}</span>
+        ${multiSlots.length > 2 ? `<button class="delete-btn" onclick="removeMultiSlot(${slot.id})" aria-label="Remove">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>` : ''}
+      </div>
+      <div class="form-group">
+        <label>Colour hint <span class="label-opt">optional</span></label>
+        <input type="text" class="form-control" placeholder="e.g. Maroon"
+               value="${escAttr(slot.colourHint)}"
+               oninput="updateSlotColourHint(${slot.id}, this.value)" />
+      </div>
+      ${slot.photos.length === 0
+        ? `<div class="upload-zone multi-upload-zone" onclick="triggerSlotUpload(${slot.id})">
+             <p class="upload-hint">Tap to add photos</p>
+             <p class="upload-sub">Up to 5 photos</p>
+           </div>`
+        : `<div class="thumb-grid">
+             ${slot.photoURLs.map((url, j) => `
+               <div class="thumb-item">
+                 <img src="${url}" class="thumb-img" alt="Photo ${j + 1}" />
+               </div>`).join('')}
+             ${slot.photos.length < 5 ? `<div class="thumb-add" onclick="triggerSlotUpload(${slot.id})"><span>+</span><span>Add</span></div>` : ''}
+           </div>`
+      }
+      <input type="file" id="slot-input-${slot.id}" accept="image/*" multiple hidden
+             onchange="handleSlotFiles(${slot.id}, this)" />
+    </div>`).join('');
+}
+
+function triggerSlotUpload(slotId) {
+  document.getElementById(`slot-input-${slotId}`)?.click();
+}
+
+function handleSlotFiles(slotId, input) {
+  const slot = multiSlots.find(s => s.id === slotId);
+  if (!slot) return;
+  const files = [...input.files].filter(f => f.type.startsWith('image/'));
+  const space = 5 - slot.photos.length;
+  slot.photos = [...slot.photos, ...files.slice(0, space)];
+  slot.photoURLs.forEach(u => URL.revokeObjectURL(u));
+  slot.photoURLs = slot.photos.map(f => URL.createObjectURL(f));
+  input.value = '';
+  renderMultiSlots();
+}
+
+function updateSlotColourHint(slotId, value) {
+  const slot = multiSlots.find(s => s.id === slotId);
+  if (slot) slot.colourHint = value;
+}
+
+// ── Multi-variant generate all ────────────────────────────────────────────────
+async function startGenerateAll() {
+  const emptySlots = multiSlots.filter(s => s.photos.length === 0);
+  if (emptySlots.length > 0) {
+    showError('multi-generate-error', `Please add photos for all ${multiSlots.length} colours before generating.`);
+    return;
+  }
+  hideMsg('multi-generate-error');
+
+  const btn = document.getElementById('multi-generate-btn');
+  btn.disabled = true;
+
+  const notes = document.getElementById('multi-notes').value.trim();
+  const price  = document.getElementById('multi-price').value.trim();
+  const avail  = document.getElementById('multi-availability').value;
+
+  let firstDraft = null;
+
+  for (let i = 0; i < multiSlots.length; i++) {
+    const slot = multiSlots[i];
+    btn.textContent = `Analysing colour ${i + 1} of ${multiSlots.length}…`;
+
+    const fd = new FormData();
+    slot.photos.forEach(f => fd.append('photos', f));
+    const slotNotes = slot.colourHint ? `${notes ? notes + '. ' : ''}Colour: ${slot.colourHint}` : notes;
+    fd.append('notes',        slotNotes);
+    fd.append('price',        price);
+    fd.append('availability', avail);
+    fd.append('sibling_id',   '');
+    // For slots 2+, pass the first draft as sibling so AI mirrors structure/fields
+    fd.append('sibling_draft', firstDraft ? JSON.stringify(firstDraft) : '');
+
+    try {
+      const res  = await fetch(`${API}/generate`, { method: 'POST', headers: { 'x-token': token() }, body: fd });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 401) { logout(); return; }
+        showError('multi-generate-error', `Failed on colour ${i + 1}: ${data.detail || 'Could not analyse photos.'}`);
+        btn.disabled = false;
+        btn.textContent = 'Analyse & generate all';
+        return;
+      }
+
+      slot.sessionId = data.sessionId;
+      slot.draft     = data.draft;
+
+      if (i === 0) {
+        firstDraft = data.draft;
+        // Set parentId on first slot (its own base id — strip colour segment)
+        slot.draft.parentId = data.draft.id.split('-').slice(0, 3).join('-');
+      } else {
+        // All other slots share the same parentId as slot 1
+        slot.draft.parentId = firstDraft.id.split('-').slice(0, 3).join('-');
+      }
+    } catch {
+      showError('multi-generate-error', 'Could not reach the server. Please check your connection.');
+      btn.disabled = false;
+      btn.textContent = 'Analyse & generate all';
+      return;
+    }
+  }
+
+  // Show review
+  renderMultiReview();
+  document.getElementById('multi-review').classList.remove('hidden');
+  document.getElementById('multi-review').scrollIntoView({ behavior: 'smooth' });
+}
+
+function renderMultiReview() {
+  document.getElementById('multi-review-list').innerHTML = multiSlots.map(slot => {
+    const d = slot.draft;
+    const thumb = slot.photoURLs[0]
+      ? `<img src="${slot.photoURLs[0]}" class="multi-review-thumb" alt="" />`
+      : `<div class="multi-review-thumb-placeholder"></div>`;
+    return `
+      <div class="multi-review-card">
+        ${thumb}
+        <div class="multi-review-card-info">
+          <div class="form-group" style="margin-bottom:6px">
+            <label style="font-size:0.72rem;margin-bottom:2px;color:var(--muted)">Name</label>
+            <input type="text" class="form-control" id="slot-name-${slot.id}" value="${escAttr(d.name || '')}" />
+          </div>
+          <div class="form-group" style="margin-bottom:6px">
+            <label style="font-size:0.72rem;margin-bottom:2px;color:var(--muted)">Colour</label>
+            <input type="text" class="form-control" id="slot-colour-${slot.id}"
+                   value="${escAttr(d.colour || '')}"
+                   oninput="updateSlotReviewId(${slot.id})" />
+          </div>
+          <p class="multi-review-card-meta" style="margin-top:4px">${escHtml(d.category || '—')}</p>
+          <p id="slot-id-display-${slot.id}" style="font-family:monospace;font-size:0.72rem;color:var(--muted);margin-top:2px">${escHtml(d.id || '')}</p>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function updateSlotReviewId(slotId) {
+  const slot = multiSlots.find(s => s.id === slotId);
+  if (!slot || !slot.draft) return;
+  const colour = document.getElementById(`slot-colour-${slotId}`)?.value.trim() || '';
+  const base = (slot.draft.id || '').split('-').slice(0, 3).join('-');
+  const colourCode = colour.toUpperCase().replace(/\s+/g, '-');
+  const newId = base && colourCode ? `${base}-${colourCode}` : slot.draft.id;
+  const display = document.getElementById(`slot-id-display-${slotId}`);
+  if (display) display.textContent = newId;
+}
+
+// ── Multi-variant submit batch ────────────────────────────────────────────────
+async function submitBatch() {
+  const btn = document.getElementById('multi-confirm-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Creating PR…';
+  hideMsg('multi-confirm-error');
+
+  // Read edited name/colour back into each draft and rebuild all dependent fields
+  multiSlots.forEach(slot => {
+    const name   = document.getElementById(`slot-name-${slot.id}`)?.value.trim();
+    const colour = document.getElementById(`slot-colour-${slot.id}`)?.value.trim();
+
+    if (name) {
+      slot.draft.name = name;
+      slot.draft.slug = slugify(name);
+      const suffix = name.toLowerCase().includes('saree') ? '' : ' saree';
+      slot.draft.whatsappMessage = `Hi, I'm interested in the ${name}${suffix}. Could you share more details and pricing?`;
+    }
+
+    if (colour) {
+      slot.draft.colour = colour;
+      const base = (slot.draft.id || '').split('-').slice(0, 3).join('-');
+      const colourCode = colour.toUpperCase().replace(/\s+/g, '-');
+      if (base && colourCode) {
+        slot.draft.id = `${base}-${colourCode}`;
+        slot.draft.images = (slot.draft.images || []).map((_, i) =>
+          `images/products/${slot.draft.id.toLowerCase()}-${i + 1}.jpg`
+        );
+      }
+    }
+    // parentId, category, categorySlug, work, availability, fabricDetails, price — unchanged
+  });
+
+  const items = multiSlots.map(s => ({ sessionId: s.sessionId, draft: s.draft }));
+
+  try {
+    const res  = await fetch(`${API}/confirm-batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-token': token() },
+      body: JSON.stringify({ items }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 401) { logout(); return; }
+      showError('multi-confirm-error', data.detail || 'Could not create the pull request. Please try again.');
+    } else {
+      document.getElementById('multi-review').classList.add('hidden');
+      document.getElementById('multi-success-msg').textContent =
+        `${data.count} colour variant${data.count === 1 ? '' : 's'} submitted for review.`;
+      document.getElementById('multi-pr-link').href = data.pr_url;
+      document.getElementById('multi-success').classList.remove('hidden');
+    }
+  } catch {
+    showError('multi-confirm-error', 'Could not reach the server. Please check your connection.');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Submit all & create PR';
+  }
 }
