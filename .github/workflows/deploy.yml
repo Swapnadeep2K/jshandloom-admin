@@ -21,6 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Bust cache
+        run: |
+          SHA=$(git rev-parse --short HEAD)
+          sed -i "s/style\.css/style.css?v=$SHA/" index.html
+          sed -i "s/app\.js/app.js?v=$SHA/" index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
