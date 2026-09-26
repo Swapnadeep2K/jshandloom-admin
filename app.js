@@ -7,6 +7,7 @@ let currentDraft   = null;
 let currentSessionId = null;
 
 let allProducts = [];
+let imageBase   = '';
 let origLiveIds = new Set();
 let origFeatIds = new Set();
 let curLiveIds  = new Set();
@@ -350,6 +351,7 @@ async function loadManage() {
     }
 
     allProducts = data.all || [];
+    imageBase   = data.imageBase || '';
     origLiveIds = new Set(data.liveIds || []);
     origFeatIds = new Set(allProducts.filter(p => p.isFeatured).map(p => p.id));
     curLiveIds  = new Set(origLiveIds);
@@ -377,11 +379,18 @@ async function loadManage() {
 
 function renderProductList() {
   document.getElementById('product-list').innerHTML = allProducts.map(p => {
-    const live = curLiveIds.has(p.id);
-    const feat = curFeatIds.has(p.id);
-    const meta = [p.category, p.colour].filter(Boolean).join(' · ') || '—';
+    const live    = curLiveIds.has(p.id);
+    const feat    = curFeatIds.has(p.id);
+    const meta    = [p.category, p.colour].filter(Boolean).join(' · ') || '—';
+    const imgPath = p.images && p.images[0];
+    const imgSrc  = imgPath ? `${imageBase}/${imgPath}` : '';
+    const imgHtml = imgSrc
+      ? `<img class="product-card-img" src="${imgSrc}" alt="${escAttr(p.name || '')}" />`
+      : `<div class="product-card-img product-card-img-placeholder"></div>`;
+
     return `
       <div class="product-card">
+        ${imgHtml}
         <div class="product-card-info">
           <p class="product-card-name">${escHtml(p.name || p.id)}</p>
           <p class="product-card-meta">${escHtml(meta)}</p>

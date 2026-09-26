@@ -427,6 +427,17 @@ select.form-control {
   justify-content: space-between;
   gap: 12px;
 }
+.product-card-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.product-card-img-placeholder {
+  background: var(--border);
+}
+
 .product-card-info { flex: 1; min-width: 0; }
 .product-card-name {
   font-size: 15px;
