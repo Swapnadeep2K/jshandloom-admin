@@ -383,7 +383,9 @@ function renderProductList() {
     const feat    = curFeatIds.has(p.id);
     const meta    = [p.category, p.colour].filter(Boolean).join(' · ') || '—';
     const imgPath = p.images && p.images[0];
-    const imgSrc  = imgPath ? `${imageBase}/${imgPath}` : '';
+    const imgSrc  = imgPath
+      ? (imgPath.startsWith('http') ? imgPath : `${imageBase}/${imgPath}`)
+      : '';
     const imgHtml = imgSrc
       ? `<img class="product-card-img" src="${imgSrc}" alt="${escAttr(p.name || '')}" />`
       : `<div class="product-card-img product-card-img-placeholder"></div>`;
