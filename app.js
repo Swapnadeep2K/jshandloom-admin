@@ -267,6 +267,7 @@ function resetAddForm() {
   if (mBtn) { mBtn.disabled = false; mBtn.textContent = 'Analyse & generate all'; }
   const addSlotBtn = f('add-slot-btn');
   if (addSlotBtn) addSlotBtn.disabled = false;
+  setMultiUploadCollapsed(false);
   hideMsg('multi-generate-error');
   hideMsg('multi-confirm-error');
 
@@ -277,6 +278,35 @@ function resetAddForm() {
   if (singleView) singleView.classList.add('hidden');
   const multiView = f('multi-add-view');
   if (multiView) multiView.classList.add('hidden');
+}
+
+function retryGenerate() {
+  document.getElementById('add-step-2').classList.add('hidden');
+  document.getElementById('add-step-1').classList.remove('hidden');
+  document.getElementById('add-review').classList.add('hidden');
+  document.getElementById('gen-loading').classList.remove('hidden');
+}
+
+function setMultiUploadCollapsed(collapsed) {
+  const body    = document.getElementById('multi-upload-body');
+  const chevron = document.getElementById('multi-upload-chevron');
+  const label   = document.getElementById('multi-upload-toggle-label');
+  if (!body) return;
+  if (collapsed) {
+    body.classList.add('hidden');
+    chevron.style.transform = 'rotate(180deg)';
+    label.textContent = 'Show upload section';
+  } else {
+    body.classList.remove('hidden');
+    chevron.style.transform = '';
+    label.textContent = 'Upload & generate';
+  }
+}
+
+function toggleMultiUpload() {
+  const body = document.getElementById('multi-upload-body');
+  if (!body) return;
+  setMultiUploadCollapsed(!body.classList.contains('hidden'));
 }
 
 // ── Add product — review screen ───────────────────────────────────────────────
@@ -1204,6 +1234,7 @@ async function startGenerateAll() {
 
       slot.sessionId = data.sessionId;
       slot.draft     = data.draft;
+      if (i === 0) currentCategories = data.categories || currentCategories;
 
       if (i === 0) {
         firstDraft = data.draft;
@@ -1221,34 +1252,74 @@ async function startGenerateAll() {
     }
   }
 
-  // Show review
+  // Collapse upload section and show review
+  btn.disabled    = false;
+  btn.textContent = 'Analyse & generate all';
+  setMultiUploadCollapsed(true);
   renderMultiReview();
   document.getElementById('multi-review').classList.remove('hidden');
   document.getElementById('multi-review').scrollIntoView({ behavior: 'smooth' });
 }
 
 function renderMultiReview() {
+  // ── Shared fields section (use first slot's draft as source) ──────────────
+  const src = multiSlots[0]?.draft || {};
+  const SHARED_DEFS = [
+    { key: 'category', label: 'Category',     type: 'text' },
+    { key: 'work',     label: 'Craft / Work', type: 'text' },
+    { key: 'price',    label: 'Price',        type: 'text', placeholder: '₹12,500  or  Price on enquiry' },
+  ];
+
+  document.getElementById('multi-shared-fields').innerHTML = SHARED_DEFS.map(f => {
+    const val     = src[f.key];
+    const flagged = !!src[`${f.key}_needsReview`];
+    const badge   = flagged ? '<span class="needs-review-badge">Needs review</span>' : '';
+    const cls     = `form-group${flagged ? ' needs-review' : ''}`;
+    const control = `<input type="text" class="form-control" id="shared-${f.key}" value="${escAttr(val || '')}"${f.placeholder ? ` placeholder="${escAttr(f.placeholder)}"` : ''} />`;
+    return `<div class="${cls}"><label class="form-label">${escHtml(f.label)}${badge}</label>${control}</div>`;
+  }).join('');
+
+  // ── Per-variant cards (name, colour, description only) ───────────────────
   document.getElementById('multi-review-list').innerHTML = multiSlots.map(slot => {
     const d = slot.draft;
     const thumb = slot.photoURLs[0]
       ? `<img src="${slot.photoURLs[0]}" class="multi-review-thumb" alt="" />`
       : `<div class="multi-review-thumb-placeholder"></div>`;
+
+    const availOpts = ['In Stock', 'Made to Order'].map(o =>
+      `<option${o === (d.availability || '') ? ' selected' : ''}>${escHtml(o)}</option>`).join('');
+
     return `
       <div class="multi-review-card">
         ${thumb}
         <div class="multi-review-card-info">
-          <div class="form-group" style="margin-bottom:6px">
-            <label style="font-size:0.72rem;margin-bottom:2px;color:var(--muted)">Name</label>
+          <div class="form-group slot-form-group">
+            <label class="slot-field-label">Name</label>
             <input type="text" class="form-control" id="slot-name-${slot.id}" value="${escAttr(d.name || '')}" />
           </div>
-          <div class="form-group" style="margin-bottom:6px">
-            <label style="font-size:0.72rem;margin-bottom:2px;color:var(--muted)">Colour</label>
+          <div class="form-group slot-form-group">
+            <label class="slot-field-label">Colour</label>
             <input type="text" class="form-control" id="slot-colour-${slot.id}"
                    value="${escAttr(d.colour || '')}"
                    oninput="updateSlotReviewId(${slot.id})" />
           </div>
-          <p class="multi-review-card-meta" style="margin-top:4px">${escHtml(d.category || '—')}</p>
-          <p id="slot-id-display-${slot.id}" style="font-family:monospace;font-size:0.72rem;color:var(--muted);margin-top:2px">${escHtml(d.id || '')}</p>
+          <div class="form-group slot-form-group">
+            <label class="slot-field-label">Description</label>
+            <textarea class="form-control" id="slot-desc-${slot.id}" rows="2">${escHtml(d.description || '')}</textarea>
+          </div>
+          <div class="form-group slot-form-group">
+            <label class="slot-field-label">Availability</label>
+            <select class="form-control" id="slot-availability-${slot.id}">${availOpts}</select>
+          </div>
+          <div class="form-group slot-form-group">
+            <label class="slot-field-label">Fabric details</label>
+            <textarea class="form-control" id="slot-fabricDetails-${slot.id}" rows="3">${escHtml(d.fabricDetails || '')}</textarea>
+          </div>
+          <div class="form-group slot-form-group">
+            <label class="slot-field-label">Featured on homepage</label>
+            <label class="checkbox-label"><input type="checkbox" id="slot-isFeatured-${slot.id}"${d.isFeatured ? ' checked' : ''} /> Yes</label>
+          </div>
+          <p id="slot-id-display-${slot.id}" class="slot-id-display">${escHtml(d.id || '')}</p>
         </div>
       </div>`;
   }).join('');
@@ -1272,10 +1343,40 @@ async function submitBatch() {
   btn.textContent = 'Creating PR…';
   hideMsg('multi-confirm-error');
 
-  // Read edited name/colour back into each draft and rebuild all dependent fields
+  // Step A: read shared fields (category, work, price) and apply to ALL drafts
+  const sharedCategory = document.getElementById('shared-category')?.value.trim();
+  const sharedWork     = document.getElementById('shared-work')?.value.trim();
+  const sharedPrice    = document.getElementById('shared-price')?.value.trim();
+
+  multiSlots.forEach(slot => {
+    if (sharedCategory) {
+      slot.draft.category    = sharedCategory;
+      slot.draft.categorySlug = slugify(sharedCategory);
+      // Rebuild product ID with new category code if found in known categories
+      const newCat = (currentCategories || []).find(c => c.name.toLowerCase() === sharedCategory.toLowerCase());
+      if (newCat) {
+        const parts = (slot.draft.id || '').split('-');
+        if (parts.length >= 2) {
+          parts[1] = newCat.code.toUpperCase();
+          slot.draft.id = parts.join('-');
+          slot.draft.images = (slot.draft.images || []).map((_, i) =>
+            `images/products/${slot.draft.id.toLowerCase()}-${i + 1}.jpg`
+          );
+        }
+      }
+    }
+    if (sharedWork)  slot.draft.work  = sharedWork;
+    if (sharedPrice) slot.draft.price = sharedPrice;
+  });
+
+  // Step B: read per-variant fields and rebuild dependent fields
   multiSlots.forEach(slot => {
     const name   = document.getElementById(`slot-name-${slot.id}`)?.value.trim();
     const colour = document.getElementById(`slot-colour-${slot.id}`)?.value.trim();
+    const desc   = document.getElementById(`slot-desc-${slot.id}`)?.value.trim();
+    const avail  = document.getElementById(`slot-availability-${slot.id}`)?.value;
+    const fabric = document.getElementById(`slot-fabricDetails-${slot.id}`)?.value.trim();
+    const featured = document.getElementById(`slot-isFeatured-${slot.id}`)?.checked;
 
     if (name) {
       slot.draft.name = name;
@@ -1295,7 +1396,11 @@ async function submitBatch() {
         );
       }
     }
-    // parentId, category, categorySlug, work, availability, fabricDetails, price — unchanged
+
+    if (desc)   slot.draft.description = desc;
+    if (avail)  slot.draft.availability = avail;
+    if (fabric) slot.draft.fabricDetails = fabric;
+    slot.draft.isFeatured = !!featured;
   });
 
   const items = multiSlots.map(s => ({ sessionId: s.sessionId, draft: s.draft }));
@@ -1311,6 +1416,8 @@ async function submitBatch() {
     if (!res.ok) {
       if (res.status === 401) { logout(); return; }
       showError('multi-confirm-error', data.detail || 'Could not create the pull request. Please try again.');
+      btn.disabled    = false;
+      btn.textContent = 'Submit all & create PR';
     } else {
       document.getElementById('multi-review').classList.add('hidden');
       document.getElementById('multi-success-msg').textContent =
@@ -1320,7 +1427,6 @@ async function submitBatch() {
     }
   } catch {
     showError('multi-confirm-error', 'Could not reach the server. Please check your connection.');
-  } finally {
     btn.disabled    = false;
     btn.textContent = 'Submit all & create PR';
   }

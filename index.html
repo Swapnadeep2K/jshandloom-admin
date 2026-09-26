@@ -175,6 +175,8 @@
         </div>
 
         <div id="add-review" class="hidden">
+          <button class="retry-toggle" onclick="retryGenerate()">&#8592; Re-try with different photos</button>
+
           <div class="step-header">
             <h2>Review &amp; submit</h2>
             <p>Check the details below. Edit anything that looks wrong, then submit.</p>
@@ -231,30 +233,40 @@
 
       <!-- Multi-variant flow -->
       <div id="multi-add-view" class="hidden">
-        <div class="step-header">
-          <h2>Add colour variants</h2>
-          <p>Upload photos for each colour. Share the same design details.</p>
+
+        <!-- Collapsible upload section -->
+        <div id="multi-upload-section" class="upload-collapse">
+          <button class="upload-collapse-toggle" onclick="toggleMultiUpload()">
+            <span id="multi-upload-toggle-label">Upload &amp; generate</span>
+            <svg id="multi-upload-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+          <div id="multi-upload-body">
+            <div class="step-header">
+              <h2>Add colour variants</h2>
+              <p>Upload photos for each colour. Share the same design details.</p>
+            </div>
+            <div id="multi-slots"></div>
+            <button class="btn btn-secondary" id="add-slot-btn" onclick="addMultiSlot()" style="margin-bottom:20px">+ Add another colour</button>
+            <div class="form-group">
+              <label for="multi-notes">Notes about the design <span class="label-opt">optional</span></label>
+              <textarea id="multi-notes" class="form-control" placeholder="e.g. Matka silk with chevron feather border — available in multiple colours"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="multi-price">Price <span class="label-opt">optional</span></label>
+              <input type="text" id="multi-price" class="form-control" placeholder="e.g. &#8377;12,500  or  Price on enquiry" />
+            </div>
+            <div class="form-group">
+              <label for="multi-availability">Availability <span class="label-opt">optional</span></label>
+              <select id="multi-availability" class="form-control">
+                <option value="">AI will decide from the photos</option>
+                <option value="In Stock">In Stock</option>
+                <option value="Made to Order">Made to Order</option>
+              </select>
+            </div>
+            <button class="btn btn-accent" id="multi-generate-btn" onclick="startGenerateAll()">Analyse &amp; generate all</button>
+            <div id="multi-generate-error" class="error-msg hidden"></div>
+          </div>
         </div>
-        <div id="multi-slots"></div>
-        <button class="btn btn-secondary" id="add-slot-btn" onclick="addMultiSlot()" style="margin-bottom:20px">+ Add another colour</button>
-        <div class="form-group">
-          <label for="multi-notes">Notes about the design <span class="label-opt">optional</span></label>
-          <textarea id="multi-notes" class="form-control" placeholder="e.g. Matka silk with chevron feather border — available in multiple colours"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="multi-price">Price <span class="label-opt">optional</span></label>
-          <input type="text" id="multi-price" class="form-control" placeholder="e.g. &#8377;12,500  or  Price on enquiry" />
-        </div>
-        <div class="form-group">
-          <label for="multi-availability">Availability <span class="label-opt">optional</span></label>
-          <select id="multi-availability" class="form-control">
-            <option value="">AI will decide from the photos</option>
-            <option value="In Stock">In Stock</option>
-            <option value="Made to Order">Made to Order</option>
-          </select>
-        </div>
-        <button class="btn btn-accent" id="multi-generate-btn" onclick="startGenerateAll()">Analyse &amp; generate all</button>
-        <div id="multi-generate-error" class="error-msg hidden"></div>
 
         <!-- Multi review -->
         <div id="multi-review" class="hidden">
@@ -262,7 +274,17 @@
             <h2>Review variants</h2>
             <p>Check each variant below before submitting.</p>
           </div>
+
+          <!-- Shared fields (common across all variants) -->
+          <div class="multi-shared-section">
+            <h3 class="multi-shared-title">Shared fields <span class="multi-shared-note">— same for all variants</span></h3>
+            <div id="multi-shared-fields"></div>
+          </div>
+
+          <!-- Per-variant cards -->
+          <h3 class="multi-shared-title" style="margin-top:20px">Variants</h3>
           <div id="multi-review-list"></div>
+
           <div class="review-actions" style="margin-top:20px">
             <button class="btn btn-success" id="multi-confirm-btn" onclick="submitBatch()">Submit all &amp; create PR</button>
             <div id="multi-confirm-error" class="error-msg hidden"></div>
