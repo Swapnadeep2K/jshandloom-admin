@@ -1,4 +1,6 @@
-const API = 'https://jshandloom-admin-api.onrender.com';
+const API = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? 'http://localhost:8000'
+  : 'https://jshandloom-admin-api.onrender.com';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let selectedPhotos = [];
@@ -6,8 +8,9 @@ let photoURLs      = [];
 let currentDraft   = null;
 let currentSessionId = null;
 
-let allProducts = [];
-let imageBase   = '';
+let allProducts      = [];
+let imageBase        = '';
+let currentCategories = [];
 let origLiveIds = new Set();
 let origFeatIds = new Set();
 let curLiveIds  = new Set();
@@ -171,8 +174,9 @@ async function startGenerate() {
       document.getElementById('add-step-1').classList.remove('hidden');
       showError('generate-error', data.detail || 'Could not analyse the photos. Please try again.');
     } else {
-      currentDraft     = data.draft;
-      currentSessionId = data.sessionId;
+      currentDraft      = data.draft;
+      currentSessionId  = data.sessionId;
+      currentCategories = data.categories || [];
       document.getElementById('gen-loading').classList.add('hidden');
       document.getElementById('add-review').classList.remove('hidden');
       showReviewScreen();
@@ -185,11 +189,12 @@ async function startGenerate() {
 }
 
 function resetAddForm() {
-  selectedPhotos = [];
+  selectedPhotos    = [];
   photoURLs.forEach(u => URL.revokeObjectURL(u));
-  photoURLs        = [];
-  currentDraft     = null;
-  currentSessionId = null;
+  photoURLs         = [];
+  currentDraft      = null;
+  currentSessionId  = null;
+  currentCategories = [];
 
   const f = id => document.getElementById(id);
   if (f('notes'))        f('notes').value        = '';
@@ -225,32 +230,70 @@ function showReviewScreen() {
 
   renderReviewPhotos();
 
-  document.getElementById('review-fields').innerHTML = REVIEW_FIELDS.map(f => {
-    const val    = currentDraft[f.key] || '';
+  const baseId = currentDraft.id || '';
+  const initColour = (currentDraft.colour || '').toUpperCase().replace(/\s+/g, '-');
+  const initDisplayId = initColour ? `${baseId}-${initColour}` : baseId;
+  const idHtml = baseId
+    ? `<div class="form-group">
+        <label>Product ID</label>
+        <input type="text" id="review-id-display" class="form-control" value="${escAttr(initDisplayId)}" disabled />
+       </div>`
+    : '';
+
+  document.getElementById('review-fields').innerHTML = idHtml + REVIEW_FIELDS.map(f => {
+    const val     = currentDraft[f.key] || '';
     const flagged = !!currentDraft[`${f.key}_needsReview`];
-    const badge    = flagged ? '<span class="needs-review-badge">Needs review</span>' : '';
-    const required = f.required ? '<span class="required-star">*</span>' : '';
-    const cls      = `form-group${flagged ? ' needs-review' : ''}`;
+    const badge   = flagged ? '<span class="needs-review-badge">Needs review</span>' : '';
+    const reqStar = f.required ? '<span class="required-star">*</span>' : '';
+    const cls     = `form-group${flagged ? ' needs-review' : ''}`;
+
+    // Category field: dropdown + optional "Other" text box
+    if (f.key === 'category' && currentCategories.length > 0) {
+      const categoryNames = currentCategories.map(c => c.name);
+      const isInList = val && categoryNames.includes(val);
+      const selectVal = val ? (isInList ? val : 'other') : '';
+      const opts = currentCategories.map(c =>
+        `<option value="${escAttr(c.name)}"${c.name === selectVal ? ' selected' : ''}>${escHtml(c.name)}</option>`
+      ).join('');
+      const otherSelected  = selectVal === 'other' ? ' selected' : '';
+      const wrapHidden     = selectVal === 'other' ? '' : ' style="display:none"';
+      const otherVal       = selectVal === 'other' ? escAttr(val) : '';
+      const placeholderSel = !selectVal ? ' selected' : '';
+      return `<div class="${cls}" id="fg-${f.key}">
+        <label for="rv-${f.key}">${f.label}${reqStar}${badge}</label>
+        <select id="rv-${f.key}" class="form-control" onchange="onCategoryChange()">
+          <option value="" disabled${placeholderSel}>Select category</option>
+          ${opts}
+          <option value="other"${otherSelected}>Other</option>
+        </select>
+        <div id="rv-category-other-wrap" class="form-group"${wrapHidden}>
+          <label for="rv-category-other">Specify category</label>
+          <input type="text" id="rv-category-other" class="form-control"
+                 placeholder="e.g. Baluchari Silk" value="${otherVal}" />
+        </div>
+      </div>`;
+    }
 
     if (f.type === 'select') {
       const opts = (f.options || []).map(o =>
         `<option${o === val ? ' selected' : ''}>${o}</option>`
       ).join('');
       return `<div class="${cls}" id="fg-${f.key}">
-        <label for="rv-${f.key}">${f.label}${required}${badge}</label>
+        <label for="rv-${f.key}">${f.label}${reqStar}${badge}</label>
         <select id="rv-${f.key}" class="form-control"><option value=""></option>${opts}</select>
       </div>`;
     }
     if (f.type === 'textarea') {
       return `<div class="${cls}" id="fg-${f.key}">
-        <label for="rv-${f.key}">${f.label}${required}${badge}</label>
+        <label for="rv-${f.key}">${f.label}${reqStar}${badge}</label>
         <textarea id="rv-${f.key}" class="form-control">${escHtml(val)}</textarea>
       </div>`;
     }
     const ph = f.placeholder ? ` placeholder="${f.placeholder}"` : '';
+    const onInput = f.key === 'colour' ? ' oninput="updateIdDisplay()"' : '';
     return `<div class="${cls}" id="fg-${f.key}">
-      <label for="rv-${f.key}">${f.label}${required}${badge}</label>
-      <input type="text" id="rv-${f.key}" class="form-control" value="${escAttr(val)}"${ph} />
+      <label for="rv-${f.key}">${f.label}${reqStar}${badge}</label>
+      <input type="text" id="rv-${f.key}" class="form-control" value="${escAttr(val)}"${ph}${onInput} />
     </div>`;
   }).join('');
 
@@ -293,6 +336,23 @@ function toggleFeatured() {
   if (t) t.classList.toggle('on', currentDraft.isFeatured);
 }
 
+function onCategoryChange() {
+  const sel  = document.getElementById('rv-category');
+  const wrap = document.getElementById('rv-category-other-wrap');
+  if (!sel || !wrap) return;
+  wrap.style.display = sel.value === 'other' ? '' : 'none';
+  if (sel.value === 'other') document.getElementById('rv-category-other')?.focus();
+}
+
+function updateIdDisplay() {
+  const baseId = currentDraft.id || '';
+  const colour = (document.getElementById('rv-colour')?.value || '').trim();
+  const colourCode = colour.toUpperCase().replace(/\s+/g, '-');
+  const displayId = colourCode ? `${baseId}-${colourCode}` : baseId;
+  const el = document.getElementById('review-id-display');
+  if (el) el.value = displayId;
+}
+
 function getReviewDraft() {
   const draft = { ...currentDraft };
 
@@ -301,16 +361,24 @@ function getReviewDraft() {
     if (el) draft[f.key] = el.value.trim() || null;
   });
 
-  // Recalculate derived fields if name or category changed
-  const name     = draft.name || '';
-  const category = draft.category || '';
-  const newSlug  = slugify(name) || 'new-product';
+  // If "Other" selected for category, use the text box value instead
+  if (document.getElementById('rv-category')?.value === 'other') {
+    draft.category = document.getElementById('rv-category-other')?.value.trim() || null;
+  }
 
-  draft.id           = newSlug;
-  draft.slug         = newSlug;
+  // Recalculate derived fields; append colour to the server-assigned base id
+  const name       = draft.name || '';
+  const category   = draft.category || '';
+  const colour     = draft.colour || '';
+  const baseId     = draft.id || slugify(name) || 'new-product';
+  const colourCode = colour.toUpperCase().replace(/\s+/g, '-');
+  const productId  = colourCode ? `${baseId}-${colourCode}` : baseId;
+
+  draft.id           = productId;
+  draft.slug         = slugify(name) || 'new-product';
   draft.categorySlug = slugify(category);
   draft.images       = Array.from({ length: selectedPhotos.length },
-                         (_, i) => `images/products/${newSlug}-${i + 1}.jpg`);
+                         (_, i) => `images/products/${productId.toLowerCase()}-${i + 1}.jpg`);
 
   if (name) {
     const suffix = name.toLowerCase().includes('saree') ? '' : ' saree';
@@ -326,6 +394,15 @@ async function submitConfirm() {
   // Validate required fields
   const missing = REVIEW_FIELDS.filter(f => {
     if (!f.required) return false;
+    if (f.key === 'category') {
+      const sel = document.getElementById('rv-category');
+      if (!sel || !sel.value) return true;
+      if (sel.value === 'other') {
+        const other = document.getElementById('rv-category-other');
+        return !other || !other.value.trim();
+      }
+      return false;
+    }
     const el = document.getElementById(`rv-${f.key}`);
     return !el || !el.value.trim();
   });
@@ -391,8 +468,9 @@ async function loadManage() {
       return;
     }
 
-    allProducts = data.all || [];
-    imageBase   = data.imageBase || '';
+    allProducts       = data.all || [];
+    imageBase         = data.imageBase || '';
+    currentCategories = data.categories || [];
     origLiveIds = new Set(data.liveIds || []);
     origFeatIds = new Set(allProducts.filter(p => p.isFeatured).map(p => p.id));
     curLiveIds  = new Set(origLiveIds);
