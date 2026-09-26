@@ -378,7 +378,7 @@ async function loadManage() {
 }
 
 function renderProductList() {
-  document.getElementById('product-list').innerHTML = allProducts.map(p => {
+  document.getElementById('product-list').innerHTML = allProducts.map((p, i) => {
     const live    = curLiveIds.has(p.id);
     const feat    = curFeatIds.has(p.id);
     const meta    = [p.category, p.colour].filter(Boolean).join(' · ') || '—';
@@ -387,7 +387,8 @@ function renderProductList() {
       ? (imgPath.startsWith('http') ? imgPath : `${imageBase}/${imgPath}`)
       : '';
     const imgHtml = imgSrc
-      ? `<img class="product-card-img" src="${imgSrc}" alt="${escAttr(p.name || '')}" />`
+      ? `<img class="product-card-img" src="${imgSrc}" alt="${escAttr(p.name || '')}"
+             onclick="openImageModal(${i})" style="cursor:pointer" />`
       : `<div class="product-card-img product-card-img-placeholder"></div>`;
 
     return `
@@ -473,6 +474,61 @@ async function saveManage() {
     updateSaveBtn();
   }
 }
+
+// ── Image modal ───────────────────────────────────────────────────────────────
+let modalImages = [];
+let modalIndex  = 0;
+
+function openImageModal(productIdx) {
+  const p = allProducts[productIdx];
+  if (!p || !p.images || p.images.length === 0) return;
+  modalImages = p.images.map(img =>
+    img.startsWith('http') ? img : `${imageBase}/${img}`
+  );
+  modalIndex = 0;
+  renderModal();
+  document.getElementById('image-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeImageModal() {
+  document.getElementById('image-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function handleModalOverlayClick(e) {
+  if (e.target === document.getElementById('image-modal')) closeImageModal();
+}
+
+function modalNav(dir) {
+  modalIndex = (modalIndex + dir + modalImages.length) % modalImages.length;
+  renderModal();
+}
+
+function modalGoto(idx) {
+  modalIndex = idx;
+  renderModal();
+}
+
+function renderModal() {
+  document.getElementById('modal-main-img').src = modalImages[modalIndex];
+  document.getElementById('modal-counter').textContent = `${modalIndex + 1} / ${modalImages.length}`;
+
+  const nav = document.getElementById('modal-nav');
+  nav.style.display = modalImages.length > 1 ? 'flex' : 'none';
+
+  document.getElementById('modal-thumbs').innerHTML = modalImages.length > 1
+    ? modalImages.map((url, i) =>
+        `<img class="modal-thumb${i === modalIndex ? ' active' : ''}"
+              src="${url}" onclick="modalGoto(${i})" alt="Photo ${i + 1}" />`
+      ).join('')
+    : '';
+}
+
+// close on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeImageModal();
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function token() { return localStorage.getItem('token') || ''; }

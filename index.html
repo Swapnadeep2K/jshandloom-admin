@@ -185,6 +185,22 @@
 
 </div>
 
+<!-- ── Image modal ───────────────────────────────────────────────────── -->
+<div id="image-modal" class="modal-overlay hidden" onclick="handleModalOverlayClick(event)">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeImageModal()">&times;</button>
+    <div class="modal-img-wrap">
+      <img id="modal-main-img" src="#" alt="" />
+    </div>
+    <div id="modal-thumbs" class="modal-thumbs"></div>
+    <div id="modal-nav" class="modal-nav">
+      <button class="arrow-btn" onclick="modalNav(-1)">&#8592;</button>
+      <span id="modal-counter" class="modal-counter"></span>
+      <button class="arrow-btn" onclick="modalNav(1)">&#8594;</button>
+    </div>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
