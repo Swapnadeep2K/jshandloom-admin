@@ -208,15 +208,15 @@ function resetAddForm() {
 // ── Add tab — review screen ───────────────────────────────────────────────────
 const REVIEW_FIELDS = [
   { key: 'name',         label: 'Product name',     type: 'text',     required: true },
-  { key: 'category',     label: 'Category',          type: 'text' },
-  { key: 'colour',       label: 'Colour',            type: 'text' },
-  { key: 'work',         label: 'Craft / Work',      type: 'text' },
-  { key: 'availability', label: 'Availability',      type: 'select',
+  { key: 'category',     label: 'Category',          type: 'text',     required: true },
+  { key: 'colour',       label: 'Colour',            type: 'text',     required: true },
+  { key: 'work',         label: 'Craft / Work',      type: 'text',     required: true },
+  { key: 'availability', label: 'Availability',      type: 'select',   required: true,
     options: ['In Stock', 'Made to Order'] },
   { key: 'price',        label: 'Price',             type: 'text',
     placeholder: '₹12,500  or  Price on enquiry' },
-  { key: 'description',  label: 'Short description', type: 'textarea' },
-  { key: 'fabricDetails',label: 'Fabric details',    type: 'textarea' },
+  { key: 'description',  label: 'Short description', type: 'textarea', required: true },
+  { key: 'fabricDetails',label: 'Fabric details',    type: 'textarea', required: true },
 ];
 
 function showReviewScreen() {
@@ -228,27 +228,28 @@ function showReviewScreen() {
   document.getElementById('review-fields').innerHTML = REVIEW_FIELDS.map(f => {
     const val    = currentDraft[f.key] || '';
     const flagged = !!currentDraft[`${f.key}_needsReview`];
-    const badge  = flagged ? '<span class="needs-review-badge">Needs review</span>' : '';
-    const cls    = `form-group${flagged ? ' needs-review' : ''}`;
+    const badge    = flagged ? '<span class="needs-review-badge">Needs review</span>' : '';
+    const required = f.required ? '<span class="required-star">*</span>' : '';
+    const cls      = `form-group${flagged ? ' needs-review' : ''}`;
 
     if (f.type === 'select') {
       const opts = (f.options || []).map(o =>
         `<option${o === val ? ' selected' : ''}>${o}</option>`
       ).join('');
-      return `<div class="${cls}">
-        <label for="rv-${f.key}">${f.label}${badge}</label>
+      return `<div class="${cls}" id="fg-${f.key}">
+        <label for="rv-${f.key}">${f.label}${required}${badge}</label>
         <select id="rv-${f.key}" class="form-control"><option value=""></option>${opts}</select>
       </div>`;
     }
     if (f.type === 'textarea') {
-      return `<div class="${cls}">
-        <label for="rv-${f.key}">${f.label}${badge}</label>
+      return `<div class="${cls}" id="fg-${f.key}">
+        <label for="rv-${f.key}">${f.label}${required}${badge}</label>
         <textarea id="rv-${f.key}" class="form-control">${escHtml(val)}</textarea>
       </div>`;
     }
     const ph = f.placeholder ? ` placeholder="${f.placeholder}"` : '';
-    return `<div class="${cls}">
-      <label for="rv-${f.key}">${f.label}${badge}</label>
+    return `<div class="${cls}" id="fg-${f.key}">
+      <label for="rv-${f.key}">${f.label}${required}${badge}</label>
       <input type="text" id="rv-${f.key}" class="form-control" value="${escAttr(val)}"${ph} />
     </div>`;
   }).join('');
@@ -294,14 +295,54 @@ function toggleFeatured() {
 
 function getReviewDraft() {
   const draft = { ...currentDraft };
+
   REVIEW_FIELDS.forEach(f => {
     const el = document.getElementById(`rv-${f.key}`);
     if (el) draft[f.key] = el.value.trim() || null;
   });
+
+  // Recalculate derived fields if name or category changed
+  const name     = draft.name || '';
+  const category = draft.category || '';
+  const newSlug  = slugify(name) || 'new-product';
+
+  draft.id           = newSlug;
+  draft.slug         = newSlug;
+  draft.categorySlug = slugify(category);
+  draft.images       = Array.from({ length: selectedPhotos.length },
+                         (_, i) => `images/products/${newSlug}-${i + 1}.jpg`);
+
+  if (name) {
+    const suffix = name.toLowerCase().includes('saree') ? '' : ' saree';
+    draft.whatsappMessage = `Hi, I'm interested in the ${name}${suffix}. Could you share more details and pricing?`;
+  } else {
+    draft.whatsappMessage = "Hi, I saw one of your sarees and I'm interested. Could you share more details and pricing?";
+  }
+
   return draft;
 }
 
 async function submitConfirm() {
+  // Validate required fields
+  const missing = REVIEW_FIELDS.filter(f => {
+    if (!f.required) return false;
+    const el = document.getElementById(`rv-${f.key}`);
+    return !el || !el.value.trim();
+  });
+
+  if (missing.length > 0) {
+    missing.forEach(f => {
+      document.getElementById(`fg-${f.key}`)?.classList.add('field-error');
+    });
+    showError('confirm-error', `Please fill in: ${missing.map(f => f.label).join(', ')}`);
+    return;
+  }
+
+  // Clear any previous field errors
+  REVIEW_FIELDS.forEach(f => {
+    document.getElementById(`fg-${f.key}`)?.classList.remove('field-error');
+  });
+
   const draft = getReviewDraft();
   const btn   = document.getElementById('confirm-btn');
   btn.disabled    = true;
@@ -532,6 +573,14 @@ document.addEventListener('keydown', e => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function token() { return localStorage.getItem('token') || ''; }
+
+function slugify(text) {
+  return (text || '').toLowerCase().trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
 
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

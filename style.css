@@ -370,6 +370,9 @@ select.form-control {
 
 .form-group.needs-review .form-control { border-color: var(--amber); }
 .needs-review-badge { font-size: 11px; color: var(--amber); font-weight: 600; margin-left: 6px; }
+.required-star { color: var(--danger); margin-left: 2px; }
+.form-group.field-error .form-control { border-color: var(--danger); }
+.form-group.field-error label { color: var(--danger); }
 
 .toggle-row {
   display: flex;
