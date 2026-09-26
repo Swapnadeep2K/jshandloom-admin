@@ -185,6 +185,20 @@
 
 </div>
 
+<!-- ── Delete confirmation modal ─────────────────────────────────────── -->
+<div id="delete-modal" class="modal-overlay hidden" onclick="handleDeleteOverlayClick(event)">
+  <div class="modal-box delete-modal-box">
+    <h3 class="delete-modal-title">Delete product?</h3>
+    <p id="delete-modal-name" class="delete-modal-name"></p>
+    <p class="delete-modal-warn">This will raise a PR to permanently remove it from your catalog. If it's live, it will be taken off the site too.</p>
+    <div class="delete-modal-actions">
+      <button class="btn btn-danger" id="delete-confirm-btn" onclick="confirmDelete()">Yes, delete</button>
+      <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+    </div>
+    <div id="delete-modal-error" class="error-msg hidden"></div>
+  </div>
+</div>
+
 <!-- ── Image modal ───────────────────────────────────────────────────── -->
 <div id="image-modal" class="modal-overlay hidden" onclick="handleModalOverlayClick(event)">
   <div class="modal-box">

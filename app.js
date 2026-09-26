@@ -468,10 +468,12 @@ async function loadManage() {
       return;
     }
 
-    allProducts       = data.all || [];
+    const rawProducts = data.all || [];
+    const stillPending = cleanPendingDeletes(rawProducts);
+    allProducts       = rawProducts.filter(p => !stillPending.includes(p.id));
     imageBase         = data.imageBase || '';
     currentCategories = data.categories || [];
-    origLiveIds = new Set(data.liveIds || []);
+    origLiveIds = new Set((data.liveIds || []).filter(id => !stillPending.includes(id)));
     origFeatIds = new Set(allProducts.filter(p => p.isFeatured).map(p => p.id));
     curLiveIds  = new Set(origLiveIds);
     curFeatIds  = new Set(origFeatIds);
@@ -532,6 +534,14 @@ function renderProductList() {
               <div class="toggle-knob"></div>
             </div>
           </div>
+          <button class="delete-btn" onclick="openDeleteModal('${escAttr(p.id)}', '${escAttr(p.name || p.id)}')" aria-label="Delete product">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/>
+              <path d="M9 6V4h6v2"/>
+            </svg>
+          </button>
         </div>
       </div>`;
   }).join('');
@@ -594,6 +604,73 @@ async function saveManage() {
   }
 }
 
+// ── Delete modal ──────────────────────────────────────────────────────────────
+let pendingDeleteId = null;
+
+function openDeleteModal(id, name) {
+  pendingDeleteId = id;
+  document.getElementById('delete-modal-name').textContent = name;
+  hideMsg('delete-modal-error');
+  const btn = document.getElementById('delete-confirm-btn');
+  btn.disabled = false;
+  btn.textContent = 'Yes, delete';
+  document.getElementById('delete-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+  pendingDeleteId = null;
+}
+
+function handleDeleteOverlayClick(e) {
+  if (e.target === document.getElementById('delete-modal')) closeDeleteModal();
+}
+
+async function confirmDelete() {
+  if (!pendingDeleteId) return;
+  const btn = document.getElementById('delete-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Creating PR…';
+  hideMsg('delete-modal-error');
+
+  try {
+    const res  = await fetch(`${API}/product/${encodeURIComponent(pendingDeleteId)}`, {
+      method: 'DELETE',
+      headers: { 'x-token': token() },
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 401) { logout(); return; }
+      showError('delete-modal-error', data.detail || 'Could not delete product. Please try again.');
+      btn.disabled = false;
+      btn.textContent = 'Yes, delete';
+    } else {
+      const deletedId = pendingDeleteId;
+      closeDeleteModal();
+      addPendingDelete(deletedId);
+      allProducts = allProducts.filter(p => p.id !== deletedId);
+      origLiveIds.delete(deletedId);
+      origFeatIds.delete(deletedId);
+      curLiveIds.delete(deletedId);
+      curFeatIds.delete(deletedId);
+      renderProductList();
+      const n = allProducts.length;
+      document.getElementById('manage-count').textContent = `${n} product${n === 1 ? '' : 's'} in your catalog`;
+      updateSaveBtn();
+      const el = document.getElementById('manage-save-success');
+      el.innerHTML = `Product deleted. <a href="${data.pr_url}" target="_blank" class="pr-link">View PR &rarr;</a>`;
+      el.classList.remove('hidden');
+    }
+  } catch {
+    showError('delete-modal-error', 'Could not reach the server. Please check your connection.');
+    btn.disabled = false;
+    btn.textContent = 'Yes, delete';
+  }
+}
+
 // ── Image modal ───────────────────────────────────────────────────────────────
 let modalImages = [];
 let modalIndex  = 0;
@@ -644,10 +721,34 @@ function renderModal() {
     : '';
 }
 
-// close on Escape
+// close modals on Escape
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeImageModal();
+  if (e.key === 'Escape') { closeImageModal(); closeDeleteModal(); }
 });
+
+// ── Pending deletes (survive refresh for 1 day or until PR merges) ───────────
+const DELETE_TTL = 24 * 60 * 60 * 1000; // 1 day
+
+function addPendingDelete(id) {
+  try {
+    const raw = JSON.parse(localStorage.getItem('pendingDeletes') || '[]');
+    const now = Date.now();
+    const rest = raw.filter(e => e.expiry > now && e.id !== id);
+    rest.push({ id, expiry: now + DELETE_TTL });
+    localStorage.setItem('pendingDeletes', JSON.stringify(rest));
+  } catch {}
+}
+function cleanPendingDeletes(loadedProducts) {
+  try {
+    const now = Date.now();
+    const raw = JSON.parse(localStorage.getItem('pendingDeletes') || '[]');
+    const loadedIds = new Set(loadedProducts.map(p => p.id));
+    // Keep only: not expired AND still in all-products (PR not yet merged)
+    const stillPending = raw.filter(e => e.expiry > now && loadedIds.has(e.id));
+    localStorage.setItem('pendingDeletes', JSON.stringify(stillPending));
+    return stillPending.map(e => e.id);
+  } catch { return []; }
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function token() { return localStorage.getItem('token') || ''; }

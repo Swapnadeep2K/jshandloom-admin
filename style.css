@@ -93,6 +93,26 @@ body {
 .btn-secondary { background: var(--border);  color: var(--primary); }
 .btn-accent    { background: var(--accent);  color: #fff; }
 .btn-success   { background: var(--success); color: #fff; }
+.btn-danger    { background: var(--danger);  color: #fff; }
+
+.delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  color: var(--muted);
+  border-radius: 6px;
+  flex-shrink: 0;
+  line-height: 0;
+  transition: color 0.15s, background 0.15s;
+}
+.delete-btn:hover { color: var(--danger); background: #fdecea; }
+
+.delete-modal-box  { max-width: 360px; padding: 28px 24px 24px; }
+.delete-modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+.delete-modal-name  { font-weight: 600; margin-bottom: 8px; color: var(--accent); }
+.delete-modal-warn  { font-size: 0.88rem; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+.delete-modal-actions { display: flex; gap: 10px; }
 
 /* ── Messages ── */
 .error-msg {
