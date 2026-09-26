@@ -431,6 +431,14 @@ function toggleFeatured() {
   if (t) t.classList.toggle('on', currentDraft.isFeatured);
 }
 
+function toggleSlotFeatured(slotId) {
+  const slot = multiSlots.find(s => s.id === slotId);
+  if (!slot) return;
+  slot.draft.isFeatured = !slot.draft.isFeatured;
+  const t = document.getElementById(`slot-isFeatured-${slotId}`);
+  if (t) t.classList.toggle('on', slot.draft.isFeatured);
+}
+
 function onSiblingChange() {
   const sel = document.getElementById('sibling-select');
   siblingId = sel ? (sel.value || null) : null;
@@ -1316,8 +1324,12 @@ function renderMultiReview() {
             <textarea class="form-control" id="slot-fabricDetails-${slot.id}" rows="3">${escHtml(d.fabricDetails || '')}</textarea>
           </div>
           <div class="form-group slot-form-group">
-            <label class="slot-field-label">Featured on homepage</label>
-            <label class="checkbox-label"><input type="checkbox" id="slot-isFeatured-${slot.id}"${d.isFeatured ? ' checked' : ''} /> Yes</label>
+            <div class="toggle-row" onclick="toggleSlotFeatured(${slot.id})">
+              <div>
+                <p class="toggle-label">Show on homepage</p>
+              </div>
+              <div class="toggle-switch${d.isFeatured ? ' on' : ''}" id="slot-isFeatured-${slot.id}"><div class="toggle-knob"></div></div>
+            </div>
           </div>
           <p id="slot-id-display-${slot.id}" class="slot-id-display">${escHtml(d.id || '')}</p>
         </div>
@@ -1376,7 +1388,7 @@ async function submitBatch() {
     const desc   = document.getElementById(`slot-desc-${slot.id}`)?.value.trim();
     const avail  = document.getElementById(`slot-availability-${slot.id}`)?.value;
     const fabric = document.getElementById(`slot-fabricDetails-${slot.id}`)?.value.trim();
-    const featured = document.getElementById(`slot-isFeatured-${slot.id}`)?.checked;
+    const featured = document.getElementById(`slot-isFeatured-${slot.id}`)?.classList.contains('on');
 
     if (name) {
       slot.draft.name = name;
