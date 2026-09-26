@@ -3,18 +3,19 @@ const API = (window.location.hostname === 'localhost' || window.location.hostnam
   : 'https://jshandloom-admin-api.onrender.com';
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let selectedPhotos = [];
-let photoURLs      = [];
-let currentDraft   = null;
-let currentSessionId = null;
-
-let allProducts      = [];
-let imageBase        = '';
+let selectedPhotos    = [];
+let photoURLs         = [];
+let currentDraft      = null;
+let currentSessionId  = null;
 let currentCategories = [];
-let origLiveIds = new Set();
-let origFeatIds = new Set();
-let curLiveIds  = new Set();
-let curFeatIds  = new Set();
+
+let allProducts   = [];
+let allCategories = [];
+let imageBase     = '';
+let origLiveIds   = new Set();
+let origFeatIds   = new Set();
+let curLiveIds    = new Set();
+let curFeatIds    = new Set();
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
@@ -67,6 +68,7 @@ function logout() {
 function showApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  loadManage();
 }
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
@@ -75,10 +77,27 @@ function switchTab(name, btn) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`tab-${name}`).classList.remove('hidden');
   btn.classList.add('active');
-  if (name === 'manage') loadManage();
+  if (name === 'products') {
+    document.getElementById('products-add-view').classList.add('hidden');
+    document.getElementById('products-list-view').classList.remove('hidden');
+    loadManage();
+  }
+  if (name === 'categories') loadCategories();
 }
 
-// ── Add tab — photo upload ────────────────────────────────────────────────────
+// ── Products tab — navigation ─────────────────────────────────────────────────
+function showAddProduct() {
+  document.getElementById('products-list-view').classList.add('hidden');
+  document.getElementById('products-add-view').classList.remove('hidden');
+}
+
+function backToProducts() {
+  resetAddForm();
+  document.getElementById('products-add-view').classList.add('hidden');
+  document.getElementById('products-list-view').classList.remove('hidden');
+}
+
+// ── Add product — photo upload ────────────────────────────────────────────────
 function initPhotoUpload() {
   const zone  = document.getElementById('upload-zone');
   const input = document.getElementById('photo-input');
@@ -141,7 +160,7 @@ function renderThumbs() {
   grid.innerHTML = thumbs + addMore;
 }
 
-// ── Add tab — generate ────────────────────────────────────────────────────────
+// ── Add product — generate ────────────────────────────────────────────────────
 async function startGenerate() {
   if (selectedPhotos.length === 0) {
     showError('generate-error', 'Please add at least one photo before generating.');
@@ -210,7 +229,7 @@ function resetAddForm() {
   hideMsg('generate-error');
 }
 
-// ── Add tab — review screen ───────────────────────────────────────────────────
+// ── Add product — review screen ───────────────────────────────────────────────
 const REVIEW_FIELDS = [
   { key: 'name',         label: 'Product name',     type: 'text',     required: true },
   { key: 'category',     label: 'Category',          type: 'text',     required: true },
@@ -247,10 +266,9 @@ function showReviewScreen() {
     const reqStar = f.required ? '<span class="required-star">*</span>' : '';
     const cls     = `form-group${flagged ? ' needs-review' : ''}`;
 
-    // Category field: dropdown + optional "Other" text box
     if (f.key === 'category' && currentCategories.length > 0) {
       const categoryNames = currentCategories.map(c => c.name);
-      const isInList = val && categoryNames.includes(val);
+      const isInList  = val && categoryNames.includes(val);
       const selectVal = val ? (isInList ? val : 'other') : '';
       const opts = currentCategories.map(c =>
         `<option value="${escAttr(c.name)}"${c.name === selectVal ? ' selected' : ''}>${escHtml(c.name)}</option>`
@@ -269,7 +287,8 @@ function showReviewScreen() {
         <div id="rv-category-other-wrap" class="form-group"${wrapHidden}>
           <label for="rv-category-other">Specify category</label>
           <input type="text" id="rv-category-other" class="form-control"
-                 placeholder="e.g. Baluchari Silk" value="${otherVal}" />
+                 placeholder="e.g. Baluchari Silk" value="${otherVal}"
+                 oninput="updateIdDisplay()" />
         </div>
       </div>`;
     }
@@ -342,13 +361,33 @@ function onCategoryChange() {
   if (!sel || !wrap) return;
   wrap.style.display = sel.value === 'other' ? '' : 'none';
   if (sel.value === 'other') document.getElementById('rv-category-other')?.focus();
+  updateIdDisplay();
+}
+
+function getSelectedCatCode() {
+  const sel = document.getElementById('rv-category');
+  if (!sel) return null;
+  const catName = sel.value === 'other'
+    ? (document.getElementById('rv-category-other')?.value.trim() || '')
+    : sel.value;
+  if (!catName) return null;
+  const cat = currentCategories.find(c => c.name === catName);
+  return cat ? cat.code : catName.replace(/\s+/g, '').slice(0, 3).toUpperCase();
+}
+
+function buildBaseId(catCode) {
+  // Backend base ID is always JSH-{CODE}-{8DIGITS}
+  const parts = (currentDraft.id || '').split('-');
+  const seqNum = parts[2] || '';
+  return catCode && seqNum ? `JSH-${catCode}-${seqNum}` : (currentDraft.id || '');
 }
 
 function updateIdDisplay() {
-  const baseId = currentDraft.id || '';
-  const colour = (document.getElementById('rv-colour')?.value || '').trim();
+  const catCode   = getSelectedCatCode();
+  const newBaseId = buildBaseId(catCode);
+  const colour    = (document.getElementById('rv-colour')?.value || '').trim();
   const colourCode = colour.toUpperCase().replace(/\s+/g, '-');
-  const displayId = colourCode ? `${baseId}-${colourCode}` : baseId;
+  const displayId  = colourCode ? `${newBaseId}-${colourCode}` : newBaseId;
   const el = document.getElementById('review-id-display');
   if (el) el.value = displayId;
 }
@@ -361,16 +400,15 @@ function getReviewDraft() {
     if (el) draft[f.key] = el.value.trim() || null;
   });
 
-  // If "Other" selected for category, use the text box value instead
   if (document.getElementById('rv-category')?.value === 'other') {
     draft.category = document.getElementById('rv-category-other')?.value.trim() || null;
   }
 
-  // Recalculate derived fields; append colour to the server-assigned base id
   const name       = draft.name || '';
   const category   = draft.category || '';
   const colour     = draft.colour || '';
-  const baseId     = draft.id || slugify(name) || 'new-product';
+  const catCode    = getSelectedCatCode();
+  const baseId     = buildBaseId(catCode) || slugify(name) || 'new-product';
   const colourCode = colour.toUpperCase().replace(/\s+/g, '-');
   const productId  = colourCode ? `${baseId}-${colourCode}` : baseId;
 
@@ -391,7 +429,6 @@ function getReviewDraft() {
 }
 
 async function submitConfirm() {
-  // Validate required fields
   const missing = REVIEW_FIELDS.filter(f => {
     if (!f.required) return false;
     if (f.key === 'category') {
@@ -415,7 +452,6 @@ async function submitConfirm() {
     return;
   }
 
-  // Clear any previous field errors
   REVIEW_FIELDS.forEach(f => {
     document.getElementById(`fg-${f.key}`)?.classList.remove('field-error');
   });
@@ -450,13 +486,13 @@ async function submitConfirm() {
   }
 }
 
-// ── Manage tab ────────────────────────────────────────────────────────────────
+// ── Products list ─────────────────────────────────────────────────────────────
 async function loadManage() {
   const f = id => document.getElementById(id);
-  f('manage-loading').classList.remove('hidden');
-  f('manage-content').classList.add('hidden');
-  f('manage-empty').classList.add('hidden');
-  f('manage-fetch-error').classList.add('hidden');
+  f('products-loading').classList.remove('hidden');
+  f('products-content').classList.add('hidden');
+  f('products-empty').classList.add('hidden');
+  f('products-fetch-error').classList.add('hidden');
 
   try {
     const res  = await fetch(`${API}/products`, { headers: { 'x-token': token() } });
@@ -464,37 +500,37 @@ async function loadManage() {
 
     if (!res.ok) {
       if (res.status === 401) { logout(); return; }
-      showError('manage-fetch-error', data.detail || 'Could not load products.');
+      showError('products-fetch-error', data.detail || 'Could not load products.');
       return;
     }
 
-    const rawProducts = data.all || [];
+    const rawProducts  = data.all || [];
     const stillPending = cleanPendingDeletes(rawProducts);
-    allProducts       = rawProducts.filter(p => !stillPending.includes(p.id));
-    imageBase         = data.imageBase || '';
-    currentCategories = data.categories || [];
+    allProducts        = rawProducts.filter(p => !stillPending.includes(p.id));
+    imageBase          = data.imageBase || '';
+    currentCategories  = data.categories || [];
     origLiveIds = new Set((data.liveIds || []).filter(id => !stillPending.includes(id)));
     origFeatIds = new Set(allProducts.filter(p => p.isFeatured).map(p => p.id));
     curLiveIds  = new Set(origLiveIds);
     curFeatIds  = new Set(origFeatIds);
 
-    f('manage-loading').classList.add('hidden');
+    f('products-loading').classList.add('hidden');
 
     if (allProducts.length === 0) {
-      f('manage-empty').classList.remove('hidden');
+      f('products-empty').classList.remove('hidden');
       return;
     }
 
     renderProductList();
     const n = allProducts.length;
-    f('manage-count').textContent = `${n} product${n === 1 ? '' : 's'} in your catalog`;
-    f('manage-content').classList.remove('hidden');
+    f('products-count').textContent = `${n} product${n === 1 ? '' : 's'} in catalog`;
+    f('products-content').classList.remove('hidden');
     updateSaveBtn();
     hideMsg('manage-save-success');
     hideMsg('manage-save-error');
   } catch {
-    f('manage-loading').classList.add('hidden');
-    showError('manage-fetch-error', 'Could not reach the server. Please check your connection.');
+    f('products-loading').classList.add('hidden');
+    showError('products-fetch-error', 'Could not reach the server. Please check your connection.');
   }
 }
 
@@ -534,7 +570,7 @@ function renderProductList() {
               <div class="toggle-knob"></div>
             </div>
           </div>
-          <button class="delete-btn" onclick="openDeleteModal('${escAttr(p.id)}', '${escAttr(p.name || p.id)}')" aria-label="Delete product">
+          <button class="delete-btn" onclick="openProductDeleteModal('${escAttr(p.id)}', '${escAttr(p.name || p.id)}')" aria-label="Delete product">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
@@ -604,15 +640,137 @@ async function saveManage() {
   }
 }
 
-// ── Delete modal ──────────────────────────────────────────────────────────────
-let pendingDeleteId = null;
+// ── Categories tab ────────────────────────────────────────────────────────────
+async function loadCategories() {
+  const f = id => document.getElementById(id);
+  f('categories-loading').classList.remove('hidden');
+  f('categories-content').classList.add('hidden');
+  f('categories-fetch-error').classList.add('hidden');
 
-function openDeleteModal(id, name) {
-  pendingDeleteId = id;
-  document.getElementById('delete-modal-name').textContent = name;
+  try {
+    const res  = await fetch(`${API}/categories`, { headers: { 'x-token': token() } });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 401) { logout(); return; }
+      showError('categories-fetch-error', data.detail || 'Could not load categories.');
+      return;
+    }
+
+    const rawCategories = data.categories || [];
+    const stillPending  = cleanPendingCategoryDeletes(rawCategories);
+    allCategories = rawCategories.filter(c => !stillPending.includes(c.code));
+
+    f('categories-loading').classList.add('hidden');
+    renderCategoryList();
+    const n = allCategories.length;
+    f('categories-count').textContent = `${n} categor${n === 1 ? 'y' : 'ies'}`;
+    f('categories-content').classList.remove('hidden');
+    hideAddCategoryForm();
+    hideMsg('add-category-success');
+  } catch {
+    f('categories-loading').classList.add('hidden');
+    showError('categories-fetch-error', 'Could not reach the server. Please check your connection.');
+  }
+}
+
+function renderCategoryList() {
+  document.getElementById('category-list').innerHTML = allCategories.map(c => `
+    <div class="category-card">
+      <div class="category-card-info">
+        <p class="category-card-name">${escHtml(c.name)}</p>
+        <p class="category-card-meta">Code: ${escHtml(c.code)} &middot; ${escHtml(c.slug)}</p>
+      </div>
+      <button class="delete-btn" onclick="openCategoryDeleteModal('${escAttr(c.code)}', '${escAttr(c.name)}')" aria-label="Delete category">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+          <path d="M10 11v6"/><path d="M14 11v6"/>
+          <path d="M9 6V4h6v2"/>
+        </svg>
+      </button>
+    </div>`).join('');
+}
+
+function showAddCategoryForm() {
+  document.getElementById('add-category-panel').classList.remove('hidden');
+  document.getElementById('new-category-name').focus();
+  hideMsg('add-category-error');
+}
+
+function hideAddCategoryForm() {
+  document.getElementById('add-category-panel').classList.add('hidden');
+  document.getElementById('new-category-name').value = '';
+  hideMsg('add-category-error');
+}
+
+async function submitAddCategory() {
+  const name = document.getElementById('new-category-name').value.trim();
+  if (!name) {
+    showError('add-category-error', 'Please enter a category name.');
+    return;
+  }
+
+  const btn = document.getElementById('add-category-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Creating PR…';
+  hideMsg('add-category-error');
+  hideMsg('add-category-success');
+
+  try {
+    const res  = await fetch(`${API}/categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-token': token() },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 401) { logout(); return; }
+      showError('add-category-error', data.detail || 'Could not add category. Please try again.');
+    } else {
+      allCategories.push(data.category);
+      renderCategoryList();
+      const n = allCategories.length;
+      document.getElementById('categories-count').textContent = `${n} categor${n === 1 ? 'y' : 'ies'}`;
+      hideAddCategoryForm();
+      const el = document.getElementById('add-category-success');
+      el.innerHTML = `Category added. <a href="${data.pr_url}" target="_blank" class="pr-link">View PR &rarr;</a>`;
+      el.classList.remove('hidden');
+    }
+  } catch {
+    showError('add-category-error', 'Could not reach the server. Please check your connection.');
+  } finally {
+    btn.disabled    = false;
+    btn.textContent = 'Submit & create PR';
+  }
+}
+
+// ── Delete modal (generic for products and categories) ────────────────────────
+let pendingDelete = null;
+
+function openProductDeleteModal(id, name) {
+  pendingDelete = { type: 'product', id, name };
+  document.getElementById('delete-modal-title').textContent = 'Delete product?';
+  document.getElementById('delete-modal-name').textContent  = name;
+  document.getElementById('delete-modal-warn').textContent  =
+    "This will raise a PR to permanently remove it from your catalog. If it's live, it will be taken off the site too.";
+  _openDeleteModal();
+}
+
+function openCategoryDeleteModal(code, name) {
+  pendingDelete = { type: 'category', code, name };
+  document.getElementById('delete-modal-title').textContent = 'Delete category?';
+  document.getElementById('delete-modal-name').textContent  = name;
+  document.getElementById('delete-modal-warn').textContent  =
+    "This will raise a PR to remove this category. Cannot delete if any products are using it.";
+  _openDeleteModal();
+}
+
+function _openDeleteModal() {
   hideMsg('delete-modal-error');
   const btn = document.getElementById('delete-confirm-btn');
-  btn.disabled = false;
+  btn.disabled    = false;
   btn.textContent = 'Yes, delete';
   document.getElementById('delete-modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -621,7 +779,7 @@ function openDeleteModal(id, name) {
 function closeDeleteModal() {
   document.getElementById('delete-modal').classList.add('hidden');
   document.body.style.overflow = '';
-  pendingDeleteId = null;
+  pendingDelete = null;
 }
 
 function handleDeleteOverlayClick(e) {
@@ -629,14 +787,19 @@ function handleDeleteOverlayClick(e) {
 }
 
 async function confirmDelete() {
-  if (!pendingDeleteId) return;
+  if (!pendingDelete) return;
+  if (pendingDelete.type === 'product')  await doDeleteProduct(pendingDelete.id);
+  if (pendingDelete.type === 'category') await doDeleteCategory(pendingDelete.code);
+}
+
+async function doDeleteProduct(id) {
   const btn = document.getElementById('delete-confirm-btn');
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Creating PR…';
   hideMsg('delete-modal-error');
 
   try {
-    const res  = await fetch(`${API}/product/${encodeURIComponent(pendingDeleteId)}`, {
+    const res  = await fetch(`${API}/product/${encodeURIComponent(id)}`, {
       method: 'DELETE',
       headers: { 'x-token': token() },
     });
@@ -645,20 +808,22 @@ async function confirmDelete() {
     if (!res.ok) {
       if (res.status === 401) { logout(); return; }
       showError('delete-modal-error', data.detail || 'Could not delete product. Please try again.');
-      btn.disabled = false;
+      btn.disabled    = false;
       btn.textContent = 'Yes, delete';
     } else {
-      const deletedId = pendingDeleteId;
       closeDeleteModal();
-      addPendingDelete(deletedId);
-      allProducts = allProducts.filter(p => p.id !== deletedId);
-      origLiveIds.delete(deletedId);
-      origFeatIds.delete(deletedId);
-      curLiveIds.delete(deletedId);
-      curFeatIds.delete(deletedId);
+      addPendingDelete(id);
+      allProducts = allProducts.filter(p => p.id !== id);
+      origLiveIds.delete(id); origFeatIds.delete(id);
+      curLiveIds.delete(id);  curFeatIds.delete(id);
       renderProductList();
       const n = allProducts.length;
-      document.getElementById('manage-count').textContent = `${n} product${n === 1 ? '' : 's'} in your catalog`;
+      if (n === 0) {
+        document.getElementById('products-content').classList.add('hidden');
+        document.getElementById('products-empty').classList.remove('hidden');
+      } else {
+        document.getElementById('products-count').textContent = `${n} product${n === 1 ? '' : 's'} in catalog`;
+      }
       updateSaveBtn();
       const el = document.getElementById('manage-save-success');
       el.innerHTML = `Product deleted. <a href="${data.pr_url}" target="_blank" class="pr-link">View PR &rarr;</a>`;
@@ -666,7 +831,43 @@ async function confirmDelete() {
     }
   } catch {
     showError('delete-modal-error', 'Could not reach the server. Please check your connection.');
-    btn.disabled = false;
+    btn.disabled    = false;
+    btn.textContent = 'Yes, delete';
+  }
+}
+
+async function doDeleteCategory(code) {
+  const btn = document.getElementById('delete-confirm-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Creating PR…';
+  hideMsg('delete-modal-error');
+
+  try {
+    const res  = await fetch(`${API}/category/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+      headers: { 'x-token': token() },
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 401) { logout(); return; }
+      showError('delete-modal-error', data.detail || 'Could not delete category.');
+      btn.disabled    = false;
+      btn.textContent = 'Yes, delete';
+    } else {
+      closeDeleteModal();
+      addPendingCategoryDelete(code);
+      allCategories = allCategories.filter(c => c.code !== code);
+      renderCategoryList();
+      const n = allCategories.length;
+      document.getElementById('categories-count').textContent = `${n} categor${n === 1 ? 'y' : 'ies'}`;
+      const el = document.getElementById('add-category-success');
+      el.innerHTML = `Category deleted. <a href="${data.pr_url}" target="_blank" class="pr-link">View PR &rarr;</a>`;
+      el.classList.remove('hidden');
+    }
+  } catch {
+    showError('delete-modal-error', 'Could not reach the server. Please check your connection.');
+    btn.disabled    = false;
     btn.textContent = 'Yes, delete';
   }
 }
@@ -726,8 +927,8 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeImageModal(); closeDeleteModal(); }
 });
 
-// ── Pending deletes (survive refresh for 1 day or until PR merges) ───────────
-const DELETE_TTL = 24 * 60 * 60 * 1000; // 1 day
+// ── Pending deletes ───────────────────────────────────────────────────────────
+const DELETE_TTL = 24 * 60 * 60 * 1000;
 
 function addPendingDelete(id) {
   try {
@@ -738,15 +939,36 @@ function addPendingDelete(id) {
     localStorage.setItem('pendingDeletes', JSON.stringify(rest));
   } catch {}
 }
+
 function cleanPendingDeletes(loadedProducts) {
   try {
     const now = Date.now();
     const raw = JSON.parse(localStorage.getItem('pendingDeletes') || '[]');
     const loadedIds = new Set(loadedProducts.map(p => p.id));
-    // Keep only: not expired AND still in all-products (PR not yet merged)
     const stillPending = raw.filter(e => e.expiry > now && loadedIds.has(e.id));
     localStorage.setItem('pendingDeletes', JSON.stringify(stillPending));
     return stillPending.map(e => e.id);
+  } catch { return []; }
+}
+
+function addPendingCategoryDelete(code) {
+  try {
+    const raw = JSON.parse(localStorage.getItem('pendingCategoryDeletes') || '[]');
+    const now = Date.now();
+    const rest = raw.filter(e => e.expiry > now && e.code !== code);
+    rest.push({ code, expiry: now + DELETE_TTL });
+    localStorage.setItem('pendingCategoryDeletes', JSON.stringify(rest));
+  } catch {}
+}
+
+function cleanPendingCategoryDeletes(loadedCategories) {
+  try {
+    const now = Date.now();
+    const raw = JSON.parse(localStorage.getItem('pendingCategoryDeletes') || '[]');
+    const loadedCodes = new Set(loadedCategories.map(c => c.code));
+    const stillPending = raw.filter(e => e.expiry > now && loadedCodes.has(e.code));
+    localStorage.setItem('pendingCategoryDeletes', JSON.stringify(stillPending));
+    return stillPending.map(e => e.code);
   } catch { return []; }
 }
 
