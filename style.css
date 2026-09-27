@@ -571,6 +571,29 @@ select.form-control {
 .list-view-header h2 { font-size: 1.2rem; font-weight: 700; }
 .list-view-header p  { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
 
+.search-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+  margin-bottom: 14px;
+  box-sizing: border-box;
+}
+.search-input:focus { border-color: var(--accent); }
+
+.empty-msg {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 32px 0;
+}
+
 .back-btn { margin-bottom: 20px; }
 
 .add-panel {

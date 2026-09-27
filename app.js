@@ -623,6 +623,7 @@ async function loadManage() {
       return;
     }
 
+    const ps = document.getElementById('product-search'); if (ps) ps.value = '';
     renderProductList();
     populateSiblingSelect();
     const n = allProducts.length;
@@ -638,7 +639,21 @@ async function loadManage() {
 }
 
 function renderProductList() {
-  document.getElementById('product-list').innerHTML = allProducts.map((p, i) => {
+  const q = (document.getElementById('product-search')?.value || '').toLowerCase();
+  const products = q
+    ? allProducts.filter(p =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.category || '').toLowerCase().includes(q) ||
+        (p.colour || '').toLowerCase().includes(q) ||
+        (p.id || '').toLowerCase().includes(q))
+    : allProducts;
+  if (!products.length) {
+    document.getElementById('product-list').innerHTML =
+      `<p class="empty-msg">${q ? 'No products match your search.' : 'No products yet.'}</p>`;
+    return;
+  }
+  document.getElementById('product-list').innerHTML = products.map(p => {
+    const allIdx  = allProducts.indexOf(p);
     const live    = curLiveIds.has(p.id);
     const feat    = curFeatIds.has(p.id);
     const meta    = [p.category, p.colour].filter(Boolean).join(' · ') || '—';
@@ -648,7 +663,7 @@ function renderProductList() {
       : '';
     const imgHtml = imgSrc
       ? `<img class="product-card-img" src="${imgSrc}" alt="${escAttr(p.name || '')}"
-             onclick="openImageModal(${i})" style="cursor:pointer" />`
+             onclick="openImageModal(${allIdx})" style="cursor:pointer" />`
       : `<div class="product-card-img product-card-img-placeholder"></div>`;
 
     return `
@@ -765,6 +780,7 @@ async function loadCategories() {
     allCategories = rawCategories.filter(c => !stillPending.includes(c.code));
 
     f('categories-loading').classList.add('hidden');
+    const cs = document.getElementById('category-search'); if (cs) cs.value = '';
     renderCategoryList();
     const n = allCategories.length;
     f('categories-count').textContent = `${n} categor${n === 1 ? 'y' : 'ies'}`;
@@ -778,7 +794,18 @@ async function loadCategories() {
 }
 
 function renderCategoryList() {
-  document.getElementById('category-list').innerHTML = allCategories.map(c => `
+  const q = (document.getElementById('category-search')?.value || '').toLowerCase();
+  const categories = q
+    ? allCategories.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.code || '').toLowerCase().includes(q))
+    : allCategories;
+  if (!categories.length) {
+    document.getElementById('category-list').innerHTML =
+      `<p class="empty-msg">${q ? 'No categories match your search.' : 'No categories yet.'}</p>`;
+    return;
+  }
+  document.getElementById('category-list').innerHTML = categories.map(c => `
     <div class="category-card">
       <div class="category-card-info">
         <p class="category-card-name">${escHtml(c.name)}</p>

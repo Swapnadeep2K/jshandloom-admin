@@ -68,6 +68,7 @@
           </div>
           <button class="btn btn-accent" onclick="showAddProduct()">+ Add product</button>
         </div>
+        <input type="search" id="product-search" class="search-input" placeholder="Search by name, category, colour or ID…" oninput="renderProductList()" />
         <div id="product-list"></div>
         <div class="review-actions">
           <button class="btn btn-primary" id="save-manage-btn" onclick="saveManage()" disabled>
@@ -346,6 +347,7 @@
 
       <div id="add-category-success" class="success-msg hidden"></div>
 
+      <input type="search" id="category-search" class="search-input" placeholder="Search by name or code…" oninput="renderCategoryList()" />
       <div id="category-list"></div>
 
     </div>
